@@ -27,7 +27,7 @@ SECRET_KEY = 'ce4juzp8!d@lgthqc^ip$t@@!!p#8^etlltd=pb^gqs=rh3=&a'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost']
 
 DEFAULT_LOAN_AMOUNT = Decimal(1000.00)
 BOTTOMLINE_CASH = Decimal(1000.00)
@@ -40,7 +40,7 @@ STOP_TIME = datetime(2022, 5, 5, 2, 00, 0)
 # Application definition
 
 INSTALLED_APPS = [
-    'orders',
+#    'orders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -97,25 +97,38 @@ WSGI_APPLICATION = 'WallStreet.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'wallstreet',
-        'USER': 'postgres',
-        'PASSWORD': 'admin',
-        'HOST': 'localhost'
-    }
-}
+#DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.postgresql',
+#        'NAME': 'wallstreet',
+#        'USER': 'postgres',
+#        'PASSWORD': 'admin',
+#        'HOST': 'localhost'
+#    }
+#}
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'ebdb',
-#         'USER': 'postgres',
-#         'PASSWORD': 'Champ2424',
-#         'HOST': 'aa1rgau2058nibn.ciqodeqxwwle.us-west-1.rds.amazonaws.com'
-#     }
-# }
+if 'RDS_DB_NAME' in os.environ:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': os.environ['RDS_DB_NAME'],
+            'USER': os.environ['RDS_USERNAME'],
+            'PASSWORD': os.environ['RDS_PASSWORD'],
+            'HOST': os.environ['RDS_HOSTNAME'],
+            'PORT': os.environ['RDS_PORT'],
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': 'ebdb',
+            'USER': 'postgres',
+            'PASSWORD': 'Champ2424',
+            'HOST': 'aa1rgau2058nibn.ciqodeqxwwle.us-west-1.rds.amazonaws.com',
+            'PORT':'5432'
+        }
+    }
 
 
 # Password validation
@@ -157,7 +170,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static_files")
+    os.path.join(BASE_DIR, "static")
 ]
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'static_cdn', 'static_root')
