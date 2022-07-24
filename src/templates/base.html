@@ -4,47 +4,74 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<link rel="shortcut icon" type="image/png" href="{% static 'favicon.png' %}">
+        {% block additional_meta %}{% endblock %}
+		<link rel="shortcut icon" type="image/png" href="{% static 'img/champhuntlogo.png' %}">
 		{% include 'base/css.html' %}
 		{% include 'base/js.html' %}
 		{% block base_head %}{% endblock %}
 	</head>
     <body>
-    {% include 'base/navbar.html' with brand_name='Wall Street' %}
-
+    {% if unauthorized %}
+        {% include 'base/navbar.html' %}
+    {% endif %}
     {% block out_content_top %}{% endblock %}
     
-    <div id="wrap">
-        <div id="main" class="clear-top">
+    <div class="page_wrapper">
+        {% block left_sidebar %}{% endblock %}
         {% if messages %}
-        <div class="container mt-3">
-            {% for message in messages %}
-            <div class="alert alert-success messages">
-            <span {% if message.tags %} class="{{ message.tags }}" {% endif %}>
-                {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}Important:
-                {% endif %}
-                {{ message }}
-            </span>
+            <div class="container mt-3">
+                {% for message in messages %}
+                    {% if message.tags == 'success'%}
+                        <script type=text/javascript>toastr.{{ message.tags }}('{{ message }}')</script>
+                    {% elif message.tags == 'info' %}
+                        <script type=text/javascript>toastr.{{ message.tags }}('{{ message }}')</script>
+                    {% elif message.tags == 'warning' %}
+                        <script type=text/javascript>toastr.{{ message.tags }}('{{ message }}')</script>
+                    {% elif message.tags == 'error' %}
+                        <script type=text/javascript>toastr.{{ message.tags }}('{{ message }}')</script>
+                    {% endif %}
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
         {% endif %}
-
-        
-        <div class="container-fluid">
-            {% block content_fluid %}{% endblock %}
+        <div class="body_content">
+            <div class="container-fluid top_bar fixed-top">
+                {% block top_bar %}
+                {% endblock %}
+            </div>
+            <div class="container-fluid main_content">
+                <div class="row d-flex flex-wrap">
+                    <div class="col-xl-9 d-flex flex-column">
+                        <div class="inner_left">
+                            {% block inner_left %}
+                            {% endblock %}
+                        </div>
+                    </div>
+                    <div class="col-xl-3 d-flex flex-column">
+                        <div class="inner_right">
+                            {% block inner_right %}
+                            {% endblock %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% block body_content %}{% endblock %}
         </div>
+        {% block right_sidebar %}{% endblock %}
+        <div id="main" class="clear-top">
 
-
-        <div class="container">
-            {% block content %}{% endblock %}
-        </div>
-
+            <div class="container-fluid">
+                {% block content_fluid %}{% endblock %}
+            </div>
+            <div class="container">
+                {% block content %}{% endblock %}
+            </div>
         </div>
     </div>
-
-	{% include 'base/footer.html' %}
-
+    <div>
+        {% include 'base/footer.html' %}
+    </div>
+	
+    {% block css_files %}{% endblock %}
 	{% block javascript %}{% endblock %}
     </body>
 </html>

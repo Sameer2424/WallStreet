@@ -3,30 +3,31 @@ from django.conf.urls import url, include
 from django.contrib import admin
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
-
+from django.urls import path
 from .views import HomeView, instruction_view
-from accounts.views import RegisterView, LoginView, logout_view, ProfileView, LeaderBoardView
-from market.views import NewsView
 
 
 urlpatterns = [
-    url(r'^$', HomeView.as_view(), name='home'),
-    url(r'^login/$', LoginView.as_view(), name='login'),
-    url(r'^register/$', RegisterView.as_view(), name='register'),
-    url(r'^logout/$', logout_view, name='logout'),
-    url(r'^instructions/$', instruction_view, name='instructions'),
-    url(r'^market/', include('market.urls', namespace='market')),
-    url(r'^profile/(?P<username>[a-zA-Z0-9]+)/$', ProfileView.as_view(), name='profile'),
-    url(r'^account/', include('accounts.urls', namespace='account')),
-    url(r'^accounts/', include('accounts.passwords.urls')),
-    url(r'^accounts/$', RedirectView.as_view(url='/account')),
-    url(r'^leaderboard/$', LeaderBoardView.as_view(), name='leaderboard'),
-    url(r'^news/$', NewsView.as_view(), name='news'),
-    url(r'^admin/', admin.site.urls)
+    url(r"^$", HomeView.as_view(), name="home"),
+    url(r"^instructions/$", instruction_view, name="instructions"),
+    url(r"^api/v0/", include("rest_api.urls", namespace="rest_apis")),
+    url(r"^market/", include("market.urls", namespace="market")),
+    url(r"^accounts/", include("accounts.urls", namespace="accounts")),
+    url(r"^chat/", include("chat_messages.urls", namespace="chat_messages")),
+    url(r"^accounts/passwords/", include("accounts.passwords.urls")),
+    url(r"^admin/", admin.site.urls),
+    url(r"^redeem/", include("virtualcoins.urls", namespace="virtualcoins")),
+    url(r"^payment/", include("payments.urls", namespace="payments")),
+    path("api-auth/", include("rest_framework.urls")),
+    path("auth/", include("rest_auth.urls")),
+    url("auth/registration/", include("rest_auth.registration.urls")),
+    url(r"^rest-auth/", include("rest_auth.urls")),
+    url(r"^rest-auth/registration/", include("rest_auth.registration.urls")),
+    path("", include("pwa.urls")),
 ]
 
-admin.site.site_header = 'Cricket Stock Market'
-admin.site.site_title = 'Cricket Stock Market'
+admin.site.site_header = "Cricket Trading Game"
+admin.site.site_title = "Cricket Trading Game"
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

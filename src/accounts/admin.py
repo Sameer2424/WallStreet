@@ -4,10 +4,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from .forms import UserAdminCreationForm, UserAdminChangeForm
-#from .models import EmailActivation
-
-
-User = get_user_model()
+from .models import User, Invitation, PotentialUser, UserProfile
 
 
 class UserAdmin(BaseUserAdmin):
@@ -18,40 +15,37 @@ class UserAdmin(BaseUserAdmin):
     # The fields to be used in displaying the User model.
     # These override the definitions on the base UserAdmin
     # that reference specific fields on auth.User.
-    list_display = ('username', 'email', 'cash', 'escrow', 'is_superuser')
-    list_filter = ('is_superuser', 'staff', 'is_active')
+    list_display = ("username", "email", "cash", "escrow", "is_superuser")
+    list_filter = ("is_superuser", "staff", "is_active")
     fieldsets = (
-        (None, {'fields': ('username', 'email', 'password')}),
+        (None, {"fields": ("username", "email", "password")}),
         # would have data we had fields like 'full_name'
-        ('Personal info', {'fields': ('full_name', 'cash', 'escrow')}),
-        ('Permissions', {'fields': ('is_superuser', 'staff', 'is_active')}),
+        ("Personal info", {"fields": ("full_name", "cash", "escrow")}),
+        ("Permissions", {"fields": ("is_superuser", "staff", "is_active")}),
     )
     # add_fieldsets is not a standard ModelAdmin attribute. UserAdmin
     # overrides get_fieldsets to use this attribute when creating a user.
     add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': (
-                'username', 'email', 'full_name', 'cash', 'loan', 'loan_count', 'coeff_of_variation', 'password1', 'password2'
-            )}
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "email",
+                    "full_name",
+                    "cash",
+                    "password1",
+                    "password2",
+                ),
+            },
         ),
     )
-    search_fields = ('username', 'email', 'full_name')
-    ordering = ('username', 'email', 'cash')
+    search_fields = ("username", "email", "full_name")
+    ordering = ("username", "email", "cash")
     filter_horizontal = ()
 
 
 admin.site.register(User, UserAdmin)
-
-# Remove Group Model from admin. We're not using it.
+admin.site.register(UserProfile)
 admin.site.unregister(Group)
-
-
-# class EmailActivationAdmin(admin.ModelAdmin):
-#     search_fields = ['email']   # Search guest users by email in admin panel
-
-#     class Meta:
-#         model = EmailActivation
-
-
-# admin.site.register(EmailActivation, EmailActivationAdmin)

@@ -1,6 +1,8 @@
+import numpy as np
+import random
+
 from datetime import timedelta
 from decimal import Decimal
-import numpy as np
 
 from django.conf import settings
 from django.db import models
@@ -11,80 +13,121 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.urls import reverse
 from django.template.loader import get_template
+from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
+from django.core.validators import RegexValidator
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 
-from WallStreet.utils import unique_key_generator
+from jsonfield import JSONField
+from collections import OrderedDict
+
+from push_notifications.models import Notification
+
+from rest_api.models import AbstractDateTimeModel
 
 
-DEFAULT_ACTIVATION_DAYS = getattr(settings, 'DEFAULT_ACTIVATION_DAYS', 1)
-DEFAULT_LOAN_AMOUNT = getattr(settings, 'DEFAULT_LOAN_AMOUNT', Decimal(10000.00))
-RATE_OF_INTEREST = getattr(settings, 'RATE_OF_INTEREST', Decimal(0.15))
-MAX_LOAN_ISSUE = getattr(settings, 'MAX_LOAN_ISSUE')
-BOTTOMLINE_CASH = getattr(settings, 'BOTTOMLINE_CASH', 1000)
+ALPHANUMERIC_STRING = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+KYC_FILES_VALIDATOR = FileExtensionValidator(
+    allowed_extensions=["jpg", "jpeg", "png", "pdf"]
+)
+PROFILE_PIC_VALIDATOR = FileExtensionValidator(
+    allowed_extensions=["jpg", "jpeg", "png"]
+)
+GENDER_CHOICES = (("M", "Male"), ("F", "Female"))
+PLAYING_ROLES = (
+    ("Batsman", "Batsman"),
+    ("Bowler", "Bowler"),
+    ("Batting Allrounder", "Batting Allrounder"),
+    ("Bowler Allrounder", "Bowler Allrounder"),
+)
+REFERRAL_CHOICES = (
+    ("CricTrade Event", "CricTrade Event"),
+    ("Friend Invitation", "Friend Invitation"),
+)
 
 
 class UserManager(BaseUserManager):
-
-    def create_user(self, username, email, password=None, full_name=None, is_active=True, is_staff=False, is_superuser=False):
+    def create_user(
+        self,
+        username,
+        email,
+        password=None,
+        full_name=None,
+        is_active=True,
+        is_staff=False,
+        is_superuser=False,
+        mobile=None,
+    ):
         if not username:
-            raise ValueError('Username must be unique.')
+            raise ValueError("Username taken.")
         if not email:
-            raise ValueError('Email required.')
+            raise ValueError("Email required.")
         if not password:
-            raise ValueError('Password required.')
+            raise ValueError("Password required.")
 
         user_obj = self.model(
-            username=username,
-            email=self.normalize_email(email),
-            full_name=full_name
+            username=username, email=self.normalize_email(email), full_name=full_name
         )
+        user_obj.mobile = mobile
         user_obj.set_password(password)
         user_obj.is_active = is_active
         user_obj.staff = is_staff
         user_obj.is_superuser = is_superuser
-        user_obj.cash = 0.00
+        user_obj.cash = 10000.00
         user_obj.save(using=self._db)
         return user_obj
 
     def create_staffuser(self, username, email, full_name=None, password=None):
         user = self.create_user(
-            username,
-            email,
-            password=password,
-            full_name=full_name,
-            is_staff=True
+            username, email, password=password, full_name=full_name, is_staff=True
         )
         return user
 
-    def create_superuser(self, username, email, full_name=None, password=None):
+    def create_superuser(
+        self, username, email, full_name=None, password=None, mobile=None
+    ):
         user = self.create_user(
             username,
             email,
             password=password,
             full_name=full_name,
+            mobile=mobile,
             is_staff=True,
-            is_superuser=True
+            is_superuser=True,
         )
         return user
 
 
 class User(AbstractBaseUser):
-    username = models.CharField(unique=True, max_length=120)
+    username = models.CharField(unique=True, max_length=50)
     email = models.EmailField(unique=True, max_length=255)
     full_name = models.CharField(max_length=255, blank=True, null=True)
     cash = models.DecimalField(max_digits=20, decimal_places=2, default=1000)
-    escrow = models.DecimalField(max_digits=20, decimal_places=2, default=0) # When user places a buy order, the order value will be subtracted from his cash and stored here. If the order is unsuccessful or cancelled, this amount will be added back to cash.
-    loan = models.DecimalField(max_digits=20, decimal_places=2, default=DEFAULT_LOAN_AMOUNT)
-    loan_count = models.IntegerField(default=1)  # For arithmetic interest calculation
-    loan_count_absolute = models.IntegerField(default=1)  # For overall loan issue count
-    is_active = models.BooleanField(default=True)
-    coeff_of_variation = models.DecimalField(max_digits=20, decimal_places=2, default=0.00)
+    escrow = models.DecimalField(
+        max_digits=20, decimal_places=2, default=0
+    )  # When user places a buy order, the order value will be subtracted from his cash and stored here. If the order is unsuccessful or cancelled, this amount will be added back to cash.
+    is_active = models.BooleanField(default=False)
     staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    mobile = models.CharField(
+        max_length=15,
+        null=True,
+        validators=[
+            RegexValidator(
+                regex=r"^\+?1?\d{9,15}$",
+                message="Phone number entered is invalid",
+                code="invalid_phone_number",
+            ),
+        ],
+    )
+    referral_code = models.CharField(max_length=25, blank=True, null=True)
 
-    USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['email']
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["mobile", "username"]
 
     objects = UserManager()
 
@@ -100,172 +143,202 @@ class User(AbstractBaseUser):
         return self.username
 
     def has_perm(self, perm, object=None):
-        """ Does the user have a specific permission? """
+        """Does the user have a specific permission?"""
         return True
 
     def has_module_perms(self, app_label):
-        """ Does the user have permissions to view the app 'app_label'? """
+        """Does the user have permissions to view the app 'app_label'?"""
         return True
 
     @property
     def is_staff(self):
         return self.staff
 
-    def buy_stocks(self, quantity, price):
-        purchase_amount = Decimal(quantity) * price
-        if self.cash >= purchase_amount:
-            self.cash -= Decimal(quantity) * price
-            self.save()
-            return True
-        return False
 
-    def sell_stocks(self, quantity, price):
-        self.cash += Decimal(quantity) * price
-        self.save()
+class UserFiles(models.Model):
+    aadhar = models.FileField(
+        validators=[KYC_FILES_VALIDATOR],
+        upload_to="accounts/kycfiles/aadhar/%Y/%m/%d/",
+        null=True,
+        blank=True,
+    )
+    pancard = models.FileField(
+        validators=[KYC_FILES_VALIDATOR],
+        upload_to="accounts/kycfiles/pancard/%Y/%m/%d/",
+        null=True,
+        blank=True,
+    )
+    passport = models.FileField(
+        validators=[KYC_FILES_VALIDATOR],
+        upload_to="accounts/kycfiles/passport/%Y/%m/%d/",
+        null=True,
+        blank=True,
+    )
+    driving_license = models.FileField(
+        validators=[KYC_FILES_VALIDATOR],
+        upload_to="accounts/kycfiles/driving_license/%Y/%m/%d/",
+        null=True,
+        blank=True,
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    def issue_loan(self):
-        if self.loan_count < MAX_LOAN_ISSUE and self.cash < BOTTOMLINE_CASH:
-            self.loan_count += 1
-            self.loan += DEFAULT_LOAN_AMOUNT
-            self.cash += DEFAULT_LOAN_AMOUNT
-            self.save()
-            return 'success'
-        elif self.loan_count >= MAX_LOAN_ISSUE:
-            return 'loan_count_exceeded'
-        elif self.cash >= BOTTOMLINE_CASH:
-            return 'bottomline_not_reached'
-        else:
-            return 'no_loan'
-
-    def pay_installment(self, repay_amount):
-        print(repay_amount)
-        if self.cash >= repay_amount and self.loan >= repay_amount:
-            self.cash -= repay_amount
-            self.loan -= repay_amount
-            self.save()
-            return True
-        return False
-
-    def cancel_loan(self):
-        self.loan_count = 0
-        self.cash = self.cash - self.loan
-        self.loan = Decimal(0.00)
-        self.save()
-
-    def deduct_interest(self):
-        interest = self.loan * RATE_OF_INTEREST
-        self.cash -= interest
-        self.save()
-
-    # TODO: This Leader board ranking method may change in future
-    def update_cv(self, net_worth_list):
-        self.coeff_of_variation = Decimal(np.std(net_worth_list) / np.mean(net_worth_list))
-        self.save()
+    def __str__(self):
+        return self.user.username
 
 
-# class EmailActivationQuerySet(models.query.QuerySet):
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    profile_pic = models.FileField(
+        validators=[PROFILE_PIC_VALIDATOR],
+        upload_to="accounts/profile_pics/%Y/%m/%d/",
+        null=True,
+        blank=True,
+    )
+    kycfiles = models.ForeignKey(
+        UserFiles, on_delete=models.CASCADE, blank=True, null=True
+    )
+    gender = models.CharField(
+        max_length=20, choices=GENDER_CHOICES, null=True, blank=True
+    )
+    first_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+    documents = JSONField(
+        load_kwargs={"object_pairs_hook": OrderedDict}, default=OrderedDict()
+    )  # >  {"aadhar": "1234567889", "pancard": "ABCD12345M", "passport": "K12345678K"}
+    address = models.CharField(max_length=200, blank=True, default="")
+    address2 = models.CharField(max_length=200, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    state = models.CharField(max_length=100, blank=True, default="")
+    zip_code = models.CharField(max_length=100, blank=True, default="")
+    is_player = models.BooleanField(default=False)
+    player_profile = models.CharField(
+        max_length=50, choices=PLAYING_ROLES, blank=True, null=True
+    )
+    referred_by = models.CharField(
+        max_length=50, choices=REFERRAL_CHOICES, blank=True, null=True
+    )
+    runs = models.IntegerField(default=1000)
+    friends = models.ManyToManyField("self", related_name="friends", blank=True)
+    followers = models.ManyToManyField("self", related_name="followers", blank=True)
+    crickcoins = models.IntegerField(default=1000)
+    about_me = models.CharField(max_length=500, blank=True, default='')
 
-#     def confirmable(self):
-#         """
-#         Returns those emails which can be confirmed i.e. which are not activated and expired
-#         """
-#         now = timezone.now()
-#         start_range = now - timedelta(days=DEFAULT_ACTIVATION_DAYS)
-#         end_range = now
-#         return self.filter(activated=False, forced_expire=False).filter(
-#             timestamp__gt=start_range, timestamp__lte=end_range
-#         )
-
-
-# class EmailActivationManager(models.Manager):
-
-#     def get_queryset(self):
-#         return EmailActivationQuerySet(self.model, using=self._db)
-
-#     def confirmable(self):
-#         return self.get_queryset().confirmable()
-
-#     def email_exists(self, email):
-#         """
-#         EmailActivation is created when the user is created. When only EmailActivation is deleted, User object
-#         still remains i.e. email still exists. But this function will send nothing because for this function
-#         self.get_queryset() is None. So both user and EmailActivation should exist together for this to work.
-#         """
-#         return self.get_queryset().filter(
-#             Q(email=email) | Q(user__email=email)
-#         ).filter(activated=False)
-
-
-# class EmailActivation(models.Model):
-#     user = models.ForeignKey(User, on_delete=models.CASCADE)
-#     email = models.EmailField()
-#     key = models.CharField(max_length=120, blank=True, null=True)  # activation key
-#     activated = models.BooleanField(default=False)
-#     forced_expire = models.BooleanField(default=False)  # link expired manually
-#     expires = models.IntegerField(default=7)  # automatic expire (after days)
-#     timestamp = models.DateTimeField(auto_now_add=True)
-#     update = models.DateTimeField(auto_now=True)
-
-#     objects = EmailActivationManager()
-
-#     def __str__(self):
-#         return self.email
-
-#     def can_activate(self):
-#         qs = EmailActivation.objects.filter(pk=self.pk).confirmable()
-#         if qs.exists():
-#             return True
-#         return False
-
-#     def activate(self):
-#         if self.can_activate():
-#             user = self.user
-#             user.is_active = True
-#             user.save()
-#             self.activated = True
-#             self.save()
-#             return True
-#         return False
-
-#     def send_activation(self):
-#         if not self.activated and not self.forced_expire:
-#             if self.key:
-#                 base_url = getattr(settings, 'HOST_SCHEME') + getattr(settings, 'BASE_URL')
-#                 key_path = reverse('account:email-activate', kwargs={'key': self.key})
-#                 path = '{base}{path}'.format(base=base_url, path=key_path)
-#                 context = {
-#                     'path': path,
-#                     'email': self.email
-#                 }
-#                 txt_ = get_template('registration/emails/verify.txt').render(context)
-#                 html_ = get_template('registration/emails/verify.html').render(context)
-#                 subject = 'Morphosis Stock Bridge - Verify your Account'
-#                 from_email = settings.DEFAULT_FROM_EMAIL
-#                 recipient_list = [self.email]
-#                 sent_mail = send_mail(
-#                     subject,
-#                     txt_,  # If content_type is text/plain
-#                     from_email,
-#                     recipient_list,
-#                     html_message=html_,  # If content_type is text/html
-#                     fail_silently=False  # If false, then an email will be sent if error occurs while sending the email
-#                 )
-#                 return sent_mail
-#         return False
+    def __str__(self):
+        return self.user.username
 
 
-# def pre_save_email_activation_receiver(sender, instance, *args, **kwargs):
-#     if not instance.activated and not instance.forced_expire and not instance.key:
-#         instance.key = unique_key_generator(instance)
+@receiver(m2m_changed, sender=UserProfile.friends.through)
+def handle_user_profile_friends(sender, **kwargs):
+    instance = kwargs.pop("instance", None)
+    pk_set = kwargs.pop("pk_set", None)
+    action = kwargs.pop("action", None)
+    if action == "pre_add" and instance.id in pk_set:
+        raise ValidationError(f"Can't add yourself as friend.")
 
 
-# pre_save.connect(pre_save_email_activation_receiver, sender=EmailActivation)
+@receiver(m2m_changed, sender=UserProfile.followers.through)
+def handle_user_profile_followers(sender, **kwargs):
+    instance = kwargs.pop("instance", None)
+    pk_set = kwargs.pop("pk_set", None)
+    action = kwargs.pop("action", None)
+    if action == "pre_add" and instance.id in pk_set:
+        raise ValidationError(f"Can't add yourself as follower.")
 
 
-# def post_save_user_create_receiver(sender, instance, created, *args, **kwargs):
-#     if created:
-#         email_obj = EmailActivation.objects.create(user=instance, email=instance.email)
-#         #email_obj.send_activation()
+class Invitation(models.Model):
+    INVITED = "Invited"
+    ACCEPTED = "Accepted"
+    DECLINED = "Declined"
+    STATUS_CHOICES = ((INVITED, INVITED), (ACCEPTED, ACCEPTED), (DECLINED, DECLINED))
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=INVITED)
+    from_user = models.ForeignKey(User, on_delete=models.CASCADE)
+    to_users = JSONField(
+        load_kwargs={"object_pairs_hook": OrderedDict}, default=OrderedDict()
+    )
+
+    def __str__(self):
+        return self.from_user.username
 
 
-# post_save.connect(post_save_user_create_receiver, sender=User)
+def validate_potential_user(self):
+    if User.objects.filter(email=user.email).exists():
+        raise ValidationError(
+            f"User with this email id: {user.email} exists in the database"
+        )
+
+
+class PotentialUser(AbstractDateTimeModel):
+    email = models.EmailField(unique=True, max_length=255, null=True)
+    mobile = models.CharField(
+        max_length=15,
+        null=True,
+        validators=[
+            RegexValidator(
+                regex=r"^\+?1?\d{9,15}$",
+                message="Phone number entered is invalid",
+                code="invalid_phone_number",
+            ),
+        ],
+    )
+    source = models.CharField(max_length=255)
+    waitlist_amount = models.IntegerField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.email}--{self.mobile}-{self.source}"
+
+    def save(self, *args, **kwargs):
+        if not self.email and not self.mobile:
+            raise ValidationError(
+                f"Atleast one of the fields is required: Email or Mobile"
+            )
+        super().save(*args, **kwargs)
+
+
+class FriendRequest(models.Model):
+    PENDING = 0
+    ACCEPTED = 1
+    DECLINED = 2
+    CANCELLED = 3
+    UNFRIENDED = 4
+    from_user = models.ForeignKey(
+        "accounts.UserProfile", related_name="from_user", on_delete=models.CASCADE
+    )
+    to_user = models.ForeignKey(
+        "accounts.UserProfile", related_name="to_user", on_delete=models.CASCADE
+    )
+    status = models.IntegerField(default=0)
+
+
+class UserFollowing(AbstractDateTimeModel):
+    user = models.ForeignKey(
+        "accounts.UserProfile", related_name="user_follower", on_delete=models.CASCADE
+    )
+    following_user = models.ForeignKey(
+        "accounts.UserProfile", related_name="user_following", on_delete=models.CASCADE
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "following_user"], name="unique_followers"
+            )
+        ]
+
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.user_id} follows {self.following_user_id}"
+
+
+
+@receiver(post_save, sender=UserFollowing)
+def notify_when_someone_follows(sender, instance, created, **kwargs):
+    if created:
+        following_user = instance.following_user
+        user_who_is_following = f'{instance.user.first_name} {instance.user.last_name}'
+        notification_data = {
+            "userprofile": following_user,
+            "notification": f"{user_who_is_following} is following you now",
+        }
+        Notification.objects.create(**notification_data)

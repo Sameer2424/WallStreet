@@ -7,7 +7,9 @@
 {% endblock %}
 
 {% block javascript %}
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
 <script>
+
     $(document).ready(function () {
     var endpoint = '{% url "market:cmp_api_data" object.code %}';
     var defaultData = [];
@@ -69,7 +71,10 @@
 {% block content %}
 
 <!--{% include 'market/snippets/inner_navbar.html' with company_list=company_list %}-->
-
+{% for upcomingmatch in upcomingmatches %}
+<center>Upcoming matches: <p><a href="/market/upcomingmatchplayers">{{ upcomingmatch.home_team }} vs {{ upcomingmatch.away_team}}</a></p></center>
+{% endfor %}
+<p><center><a href="/market/allplayers">All listed stocks</a></center></p>
 <div class="row">
     <div class="col mx-auto my-3">
     <div class="text-center">
@@ -90,9 +95,9 @@
     <h3>{{ object.code }}</h3>
     Current Price per stock: &#8377; {{ object.cmp }}
     {% if object.change >= 0 %}
-    <small style="color: green">({{ object.change }}%) <i class="fa fa-arrow-up"></i></small><br>
+    <small style="color: green">({{ percentage_change }}%) <i class="fa fa-arrow-up"></i></small><br>
     {% elif object.change < 0 %}
-    <small style="color: red">({{ object.change }}%) <i class="fa fa-arrow-down"></i></small><br>
+    <small style="color: red">({{ percentage_change }}%) <i class="fa fa-arrow-down"></i></small><br>
     {% endif %}
     Stocks Currently Owned: {{ stocks_owned }}
     </div>
@@ -103,15 +108,15 @@
     </div>
     <div class="col-lg-5 col-md-12 text-center mx-auto my-4">
     <form method="POST" class="transaction-form" action="{% url 'market:transaction' object.code %}" data-endpoint="{{ request.build_absolute_uri }}"> {% csrf_token %}
-        {% include 'market/snippets/transaction_form_fields.html' with button_text='Submit' purchase_modes=purchase_modes %}
+        {% include 'market/snippets/transaction_form_fields.html' with button_text='Confirm' purchase_modes=purchase_modes %}
     </form>
     </div>
 </div>
-{% include 'market/snippets/scheduler_shortcut.html' with username=request.user.username %}
-<div class="row mt-1">
+<!-- {% include 'market/snippets/scheduler_shortcut.html' with username=request.user.username %} -->
+<!-- <div class="row mt-1">
     <div class="col-12 text-center">
     How to use scheduler? <a href="{% url 'instructions' %}#rules-2">Click Here!</a>
-    </div>
+    </div> -->
 </div>
 
 {% endblock %}

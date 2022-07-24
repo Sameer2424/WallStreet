@@ -22,7 +22,7 @@
                         <td class="text-center">{{ schedule.price }}</td>
                         <td class="text-center">{{ schedule.mode }}</td>
                         <td class="text-center">
-                        <form method="post" action="{% url 'account:delete_schedule' pk=schedule.id username=request.user.username %}">{% csrf_token %}
+                        <form method="post" action="{% url 'accounts:delete_schedule' pk=schedule.id username=request.user.username %}">{% csrf_token %}
                             <input class="btn btn-danger" type="submit" value="delete">
                         </form>
                         </td>
