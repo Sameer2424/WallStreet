@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "CrickTrade",
+    "slug": "expose",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./static/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./static/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.crick.CrickTrade"
+    },
+    "android": {
+      "package": "com.crick.CrickTrade",
+      "adaptiveIcon": {
+        "foregroundImage": "./static/images/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "web": {
+      "favicon": "./static/images/favicon.png"
+    }
+  }
+}
